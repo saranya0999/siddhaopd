@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="page">
+    <h2>Add Outpatient Census Entry</h2>
+    <form method="POST">
+      {{ form.hidden_tag() }}
+      <div>
+        {{ form.entry_date.label }}<br>
+        {{ form.entry_date() }}
+      </div>
+      <fieldset>
+        <legend>Morning Cases - Old</legend>
+        {{ form.m_old_male.label }} {{ form.m_old_male(size=3) }}
+        {{ form.m_old_female.label }} {{ form.m_old_female(size=3) }}
+        {{ form.m_old_child.label }} {{ form.m_old_child(size=3) }}
+      </fieldset>
+      <fieldset>
+        <legend>Morning Cases - New</legend>
+        {{ form.m_new_male.label }} {{ form.m_new_male(size=3) }}
+        {{ form.m_new_female.label }} {{ form.m_new_female(size=3) }}
+        {{ form.m_new_child.label }} {{ form.m_new_child(size=3) }}
+      </fieldset>
+      <fieldset>
+        <legend>Evening Cases - Old</legend>
+        {{ form.e_old_male.label }} {{ form.e_old_male(size=3) }}
+        {{ form.e_old_female.label }} {{ form.e_old_female(size=3) }}
+        {{ form.e_old_child.label }} {{ form.e_old_child(size=3) }}
+      </fieldset>
+      <fieldset>
+        <legend>Evening Cases - New</legend>
+        {{ form.e_new_male.label }} {{ form.e_new_male(size=3) }}
+        {{ form.e_new_female.label }} {{ form.e_new_female(size=3) }}
+        {{ form.e_new_child.label }} {{ form.e_new_child(size=3) }}
+      </fieldset>
+      <div>
+        {{ form.submit(class="btn btn-primary") }}
+      </div>
+    </form>
+  </div>
+{% endblock %}

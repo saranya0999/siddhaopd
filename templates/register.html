@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Register</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+{% extends "base.html" %}
+{% block content %}
+  <div class="page">
+    <h2>Register</h2>
+    <form method="POST">
+      {{ form.hidden_tag() }}
+      <div>
+        {{ form.username.label }}<br>
+        {{ form.username(size=32) }}
+      </div>
+      <div>
+        {{ form.password.label }}<br>
+        {{ form.password(size=32, type='password') }}
+      </div>
+      <div>
+        {{ form.role.label }}<br>
+        {{ form.role(size=32) }}
+        <small>(Type one of: admin, dataentry, viewer)</small>
+      </div>
+      <div>
+        {{ form.submit(class="btn btn-primary") }}
+      </div>
+    </form>
+    <p>Already registered? <a href="{{ url_for('login') }}">Login here</a>.</p>
+  </div>
+{% endblock %}
