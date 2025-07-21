@@ -58,6 +58,8 @@ def dashboard():
     entries = CensusEntry.query.order_by(CensusEntry.entry_date).all()
     return render_template('dashboard.html', entries=entries)
 
+import os
+
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
 def add_entry():
@@ -67,6 +69,7 @@ def add_entry():
         if existing:
             flash('An entry for this date already exists. You can edit it below.')
             return redirect(url_for('edit_entry', entry_id=existing.id))
+
         entry = CensusEntry(
             entry_date=form.entry_date.data,
             m_old_male=form.m_old_male.data,
@@ -82,11 +85,58 @@ def add_entry():
             e_new_female=form.e_new_female.data,
             e_new_child=form.e_new_child.data,
         )
+
         db.session.add(entry)
         db.session.commit()
         flash('Census data added!')
+
+        # === User-specific Excel auto-save logic START ===
+        import os  # add at the top of your file, if not present
+
+        # Create user directory if it doesn't exist
+        user_dir = os.path.join('user_excels', current_user.username)
+        os.makedirs(user_dir, exist_ok=True)
+
+        # Gather all entries (optionally, filter by user if implemented)
+        entries = CensusEntry.query.order_by(CensusEntry.entry_date).all()
+        data = []
+        for e in entries:
+            morning_total = (
+                (e.m_old_male or 0) + (e.m_old_female or 0) + (e.m_old_child or 0) +
+                (e.m_new_male or 0) + (e.m_new_female or 0) + (e.m_new_child or 0)
+            )
+            evening_total = (
+                (e.e_old_male or 0) + (e.e_old_female or 0) + (e.e_old_child or 0) +
+                (e.e_new_male or 0) + (e.e_new_female or 0) + (e.e_new_child or 0)
+            )
+            grand_total = morning_total + evening_total
+            data.append({
+                'Date': e.entry_date.strftime('%Y-%m-%d'),
+                'Morning Old Male': e.m_old_male,
+                'Morning Old Female': e.m_old_female,
+                'Morning Old Child': e.m_old_child,
+                'Morning New Male': e.m_new_male,
+                'Morning New Female': e.m_new_female,
+                'Morning New Child': e.m_new_child,
+                'Morning Total': morning_total,
+                'Evening Old Male': e.e_old_male,
+                'Evening Old Female': e.e_old_female,
+                'Evening Old Child': e.e_old_child,
+                'Evening New Male': e.e_new_male,
+                'Evening New Female': e.e_new_female,
+                'Evening New Child': e.e_new_child,
+                'Evening Total': evening_total,
+                'Grand Total': grand_total,
+            })
+        df = pd.DataFrame(data)
+        excel_filename = os.path.join(user_dir, 'census_data.xlsx')
+        df.to_excel(excel_filename, index=False, engine='openpyxl')
+        # === User-specific Excel auto-save logic END ===
+
         return redirect(url_for('dashboard'))
     return render_template('add_entry.html', form=form)
+
+
 
 @app.route('/edit/<int:entry_id>', methods=['GET', 'POST'])
 @login_required
@@ -124,10 +174,15 @@ def edit_entry(entry_id):
 @app.route('/download')
 @login_required
 def download():
+    from flask import send_file
+    import pandas as pd
+
     # Fetch query parameters
     month = request.args.get('month')  # e.g., '2025-06'
     year = request.args.get('year')    # e.g., '2025'
+
     query = CensusEntry.query
+
     if month:
         year_part, month_part = month.split('-')
         query = query.filter(
@@ -136,8 +191,10 @@ def download():
         )
     elif year:
         query = query.filter(db.extract('year', CensusEntry.entry_date) == int(year))
+
     query = query.order_by(CensusEntry.entry_date)
     entries = query.all()
+
     data = []
     for e in entries:
         morning_total = (
@@ -146,6 +203,14 @@ def download():
         )
         evening_total = (
             (e.e_old_male or 0) + (e.e_old_female or 0) + (e.e_old_child or 0) +
+            (e.e_new_male or 0) + (e.e_new_female or 0) + (e.e_new_child or 0)
+        )
+        old_case_total = (
+            (e.m_old_male or 0) + (e.m_old_female or 0) + (e.m_old_child or 0) +
+            (e.e_old_male or 0) + (e.e_old_female or 0) + (e.e_old_child or 0)
+        )
+        new_case_total = (
+            (e.m_new_male or 0) + (e.m_new_female or 0) + (e.m_new_child or 0) +
             (e.e_new_male or 0) + (e.e_new_female or 0) + (e.e_new_child or 0)
         )
         grand_total = morning_total + evening_total
@@ -165,12 +230,17 @@ def download():
             'Evening New Female': e.e_new_female,
             'Evening New Child': e.e_new_child,
             'Evening Total': evening_total,
+            'Old Case Total': old_case_total,    # <--- Add this
+            'New Case Total': new_case_total,    # <--- Add this
             'Grand Total': grand_total,
         })
+
     df = pd.DataFrame(data)
     filename = 'census_data.xlsx'
     df.to_excel(filename, index=False)
     return send_file(filename, as_attachment=True)
+
+
 
 if __name__ == "__main__":
     with app.app_context():
