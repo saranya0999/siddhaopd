@@ -26,7 +26,7 @@ def register():
     form = RegisterForm()
     if form.validate_on_submit():
         hashed_pw = generate_password_hash(form.password.data)
-        user = User(username=form.username.data, password=hashed_pw, role=form.role.data)
+        user = User(username=form.username.data, password=hashed_pw, role='dataentry')
         db.session.add(user)
         db.session.commit()
         flash('User registered!')
@@ -174,27 +174,20 @@ def edit_entry(entry_id):
 @app.route('/download')
 @login_required
 def download():
-    from flask import send_file
-    import pandas as pd
+    import io
 
-    # Fetch query parameters
-    month = request.args.get('month')  # e.g., '2025-06'
-    year = request.args.get('year')    # e.g., '2025'
+    month = request.args.get('month')  # Should be "YYYY-MM" format
+    if not month or '-' not in month:
+        flash('Please specify a month in YYYY-MM format in the URL (e.g., ?month=2025-07)')
+        return redirect(url_for('dashboard'))
 
-    query = CensusEntry.query
+    year_part, month_part = month.split('-')
+    query = CensusEntry.query.filter(
+        db.extract('year', CensusEntry.entry_date) == int(year_part),
+        db.extract('month', CensusEntry.entry_date) == int(month_part)
+    ).order_by(CensusEntry.entry_date)
 
-    if month:
-        year_part, month_part = month.split('-')
-        query = query.filter(
-            db.extract('year', CensusEntry.entry_date) == int(year_part),
-            db.extract('month', CensusEntry.entry_date) == int(month_part)
-        )
-    elif year:
-        query = query.filter(db.extract('year', CensusEntry.entry_date) == int(year))
-
-    query = query.order_by(CensusEntry.entry_date)
     entries = query.all()
-
     data = []
     for e in entries:
         morning_total = (
@@ -230,19 +223,42 @@ def download():
             'Evening New Female': e.e_new_female,
             'Evening New Child': e.e_new_child,
             'Evening Total': evening_total,
-            'Old Case Total': old_case_total,    # <--- Add this
-            'New Case Total': new_case_total,    # <--- Add this
+            'Old Case Total': old_case_total,
+            'New Case Total': new_case_total,
             'Grand Total': grand_total,
         })
+    if not data:
+        flash('No data for selected month.')
+        return redirect(url_for('dashboard'))
 
     df = pd.DataFrame(data)
-    filename = 'census_data.xlsx'
-    df.to_excel(filename, index=False)
-    return send_file(filename, as_attachment=True)
+    output = io.BytesIO()
+    filename = f'census_data_{year_part}_{month_part}.xlsx'
+    df.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)
+    return send_file(output,
+                     as_attachment=True,
+                     download_name=filename,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
 
 
 
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
+
+        # --- Default admin user creation (add this block) ---
+        admin_user = User.query.filter_by(username='admin').first()
+        if not admin_user:
+            admin = User(
+                username='admin',
+                password=generate_password_hash('admin123'),  # Default password
+                role='admin'
+            )
+            db.session.add(admin)
+            db.session.commit()
+        # --- End admin block ---
+
     app.run(debug=True)
+

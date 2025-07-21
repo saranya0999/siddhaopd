@@ -10,8 +10,8 @@ class LoginForm(FlaskForm):
 class RegisterForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=2, max=50)])
     password = PasswordField('Password', validators=[DataRequired()])
-    role = StringField('Role', validators=[DataRequired()])
     submit = SubmitField('Register')
+
 
 class CensusForm(FlaskForm):
     entry_date = DateField('Date', validators=[DataRequired()])
