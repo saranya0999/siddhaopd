@@ -6,6 +6,7 @@ from forms import LoginForm, RegisterForm, CensusForm
 from models import db, User, CensusEntry
 import pandas as pd
 from datetime import datetime
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'replace_this_with_a_random_secret'
@@ -58,8 +59,6 @@ def dashboard():
     entries = CensusEntry.query.order_by(CensusEntry.entry_date).all()
     return render_template('dashboard.html', entries=entries)
 
-import os
-
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
 def add_entry():
@@ -69,7 +68,6 @@ def add_entry():
         if existing:
             flash('An entry for this date already exists. You can edit it below.')
             return redirect(url_for('edit_entry', entry_id=existing.id))
-
         entry = CensusEntry(
             entry_date=form.entry_date.data,
             m_old_male=form.m_old_male.data,
@@ -85,19 +83,13 @@ def add_entry():
             e_new_female=form.e_new_female.data,
             e_new_child=form.e_new_child.data,
         )
-
         db.session.add(entry)
         db.session.commit()
         flash('Census data added!')
 
-        # === User-specific Excel auto-save logic START ===
-        import os  # add at the top of your file, if not present
-
-        # Create user directory if it doesn't exist
+        # User-specific Excel auto-save logic
         user_dir = os.path.join('user_excels', current_user.username)
         os.makedirs(user_dir, exist_ok=True)
-
-        # Gather all entries (optionally, filter by user if implemented)
         entries = CensusEntry.query.order_by(CensusEntry.entry_date).all()
         data = []
         for e in entries:
@@ -107,6 +99,14 @@ def add_entry():
             )
             evening_total = (
                 (e.e_old_male or 0) + (e.e_old_female or 0) + (e.e_old_child or 0) +
+                (e.e_new_male or 0) + (e.e_new_female or 0) + (e.e_new_child or 0)
+            )
+            old_case_total = (
+                (e.m_old_male or 0) + (e.m_old_female or 0) + (e.m_old_child or 0) +
+                (e.e_old_male or 0) + (e.e_old_female or 0) + (e.e_old_child or 0)
+            )
+            new_case_total = (
+                (e.m_new_male or 0) + (e.m_new_female or 0) + (e.m_new_child or 0) +
                 (e.e_new_male or 0) + (e.e_new_female or 0) + (e.e_new_child or 0)
             )
             grand_total = morning_total + evening_total
@@ -126,17 +126,15 @@ def add_entry():
                 'Evening New Female': e.e_new_female,
                 'Evening New Child': e.e_new_child,
                 'Evening Total': evening_total,
+                'Old Case Total': old_case_total,
+                'New Case Total': new_case_total,
                 'Grand Total': grand_total,
             })
         df = pd.DataFrame(data)
         excel_filename = os.path.join(user_dir, 'census_data.xlsx')
         df.to_excel(excel_filename, index=False, engine='openpyxl')
-        # === User-specific Excel auto-save logic END ===
-
         return redirect(url_for('dashboard'))
     return render_template('add_entry.html', form=form)
-
-
 
 @app.route('/edit/<int:entry_id>', methods=['GET', 'POST'])
 @login_required
@@ -152,7 +150,6 @@ def edit_entry(entry_id):
         if existing:
             flash('Another entry for this date already exists.')
             return render_template('edit_entry.html', form=form, entry=entry)
-
         entry.entry_date = form.entry_date.data
         entry.m_old_male = form.m_old_male.data
         entry.m_old_female = form.m_old_female.data
@@ -175,19 +172,30 @@ def edit_entry(entry_id):
 @login_required
 def download():
     import io
+    import pandas as pd
+    import re
 
-    month = request.args.get('month')  # Should be "YYYY-MM" format
-    if not month or '-' not in month:
-        flash('Please specify a month in YYYY-MM format in the URL (e.g., ?month=2025-07)')
+    month = request.args.get('month')  # expects 'YYYY-MM'
+    # Validate that the parameter exists and is strictly in YYYY-MM format
+    if not month or not re.match(r'^\d{4}-\d{2}$', month):
+        flash("Please select a valid month to download, format: YYYY-MM")
         return redirect(url_for('dashboard'))
 
-    year_part, month_part = month.split('-')
-    query = CensusEntry.query.filter(
-        db.extract('year', CensusEntry.entry_date) == int(year_part),
-        db.extract('month', CensusEntry.entry_date) == int(month_part)
-    ).order_by(CensusEntry.entry_date)
+    year_val, month_val = map(int, month.split('-'))
+    if not (1 <= month_val <= 12):
+        flash("Invalid month selected.")
+        return redirect(url_for('dashboard'))
 
-    entries = query.all()
+    # Filter entries by month and year
+    entries = CensusEntry.query.filter(
+        db.extract('year', CensusEntry.entry_date) == year_val,
+        db.extract('month', CensusEntry.entry_date) == month_val
+    ).order_by(CensusEntry.entry_date).all()
+
+    if not entries:
+        flash(f"No census data available for {month}.")
+        return redirect(url_for('dashboard'))
+
     data = []
     for e in entries:
         morning_total = (
@@ -227,19 +235,18 @@ def download():
             'New Case Total': new_case_total,
             'Grand Total': grand_total,
         })
-    if not data:
-        flash('No data for selected month.')
-        return redirect(url_for('dashboard'))
 
-    df = pd.DataFrame(data)
     output = io.BytesIO()
-    filename = f'census_data_{year_part}_{month_part}.xlsx'
-    df.to_excel(output, index=False, engine='openpyxl')
+    df = pd.DataFrame(data)
+    filename = f"census_data_{year_val:04d}_{month_val:02d}.xlsx"
+    df.to_excel(output, index=False, engine="openpyxl")
     output.seek(0)
-    return send_file(output,
-                     as_attachment=True,
-                     download_name=filename,
-                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 
@@ -247,18 +254,15 @@ def download():
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-
-        # --- Default admin user creation (add this block) ---
+        # --- Default admin user creation (optional, safe to keep for emergencies) ---
         admin_user = User.query.filter_by(username='admin').first()
         if not admin_user:
             admin = User(
                 username='admin',
-                password=generate_password_hash('admin123'),  # Default password
+                password=generate_password_hash('admin123'), # Default password
                 role='admin'
             )
             db.session.add(admin)
             db.session.commit()
         # --- End admin block ---
-
     app.run(debug=True)
-

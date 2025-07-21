@@ -12,7 +12,6 @@ class RegisterForm(FlaskForm):
     password = PasswordField('Password', validators=[DataRequired()])
     submit = SubmitField('Register')
 
-
 class CensusForm(FlaskForm):
     entry_date = DateField('Date', validators=[DataRequired()])
     # Morning Old Cases

@@ -6,69 +6,80 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="navbar">
-        <span style="font-weight:bold;">Census Dashboard</span>
-        <span style="float: right; margin-right:32px;">
-            <a href="{{ url_for('dashboard') }}">Home</a>
-            <a href="{{ url_for('add_entry') }}">Add Entry</a>
-            <a href="{{ url_for('logout') }}">Logout</a>
-        </span>
+<div class="container mt-4">
+    <h1>Census Dashboard</h1>
+    <div class="mb-3">
+        <a href="{{ url_for('add_entry') }}" class="btn btn-success btn-sm">Add New Entry</a>
+        <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm">Logout</a>
     </div>
-    <div class="container">
-        <h1>Census Entries</h1>
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            {% for message in messages %}
-                <div class="flash-msg">{{ message }}</div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Morning Old Male</th>
-                    <th>Morning Old Female</th>
-                    <th>Morning Old Child</th>
-                    <th>Morning New Male</th>
-                    <th>Morning New Female</th>
-                    <th>Morning New Child</th>
-                    <th>Evening Old Male</th>
-                    <th>Evening Old Female</th>
-                    <th>Evening Old Child</th>
-                    <th>Evening New Male</th>
-                    <th>Evening New Female</th>
-                    <th>Evening New Child</th>
-                    <th>Edit</th>
-                </tr>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="alert alert-info">
+          {% for message in messages %}
+            <div>{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <!-- Download Form -->
+    <form method="get" action="{{ url_for('download') }}" class="mb-4">
+        <label for="month">Download for Month:</label>
+        <input type="month" id="month" name="month" required>
+        <button type="submit" class="btn btn-primary btn-sm">Download Excel</button>
+    </form>
+
+    <!-- Census Table -->
+    <div class="table-responsive">
+        <table class="table table-bordered table-sm align-middle">
+            <thead class="table-light">
+            <tr>
+                <th>Date</th>
+                <th>Morning Old Male</th>
+                <th>Morning Old Female</th>
+                <th>Morning Old Child</th>
+                <th>Morning New Male</th>
+                <th>Morning New Female</th>
+                <th>Morning New Child</th>
+                <th>Evening Old Male</th>
+                <th>Evening Old Female</th>
+                <th>Evening Old Child</th>
+                <th>Evening New Male</th>
+                <th>Evening New Female</th>
+                <th>Evening New Child</th>
+                <th>Edit</th>
+            </tr>
             </thead>
             <tbody>
-                {% for entry in entries %}
-                    <tr>
-                        <td>{{ entry.entry_date.strftime('%Y-%m-%d') }}</td>
-                        <td>{{ entry.m_old_male }}</td>
-                        <td>{{ entry.m_old_female }}</td>
-                        <td>{{ entry.m_old_child }}</td>
-                        <td>{{ entry.m_new_male }}</td>
-                        <td>{{ entry.m_new_female }}</td>
-                        <td>{{ entry.m_new_child }}</td>
-                        <td>{{ entry.e_old_male }}</td>
-                        <td>{{ entry.e_old_female }}</td>
-                        <td>{{ entry.e_old_child }}</td>
-                        <td>{{ entry.e_new_male }}</td>
-                        <td>{{ entry.e_new_female }}</td>
-                        <td>{{ entry.e_new_child }}</td>
-                        <td>
-                            <a class="btn" href="{{ url_for('edit_entry', entry_id=entry.id) }}">Edit</a>
-                        </td>
-                    </tr>
-                {% else %}
-                    <tr>
-                        <td colspan="14" style="text-align:center;">No census data yet.</td>
-                    </tr>
-                {% endfor %}
+            {% for entry in entries %}
+                <tr>
+                    <td>{{ entry.entry_date.strftime('%Y-%m-%d') }}</td>
+                    <td>{{ entry.m_old_male or 0 }}</td>
+                    <td>{{ entry.m_old_female or 0 }}</td>
+                    <td>{{ entry.m_old_child or 0 }}</td>
+                    <td>{{ entry.m_new_male or 0 }}</td>
+                    <td>{{ entry.m_new_female or 0 }}</td>
+                    <td>{{ entry.m_new_child or 0 }}</td>
+                    <td>{{ entry.e_old_male or 0 }}</td>
+                    <td>{{ entry.e_old_female or 0 }}</td>
+                    <td>{{ entry.e_old_child or 0 }}</td>
+                    <td>{{ entry.e_new_male or 0 }}</td>
+                    <td>{{ entry.e_new_female or 0 }}</td>
+                    <td>{{ entry.e_new_child or 0 }}</td>
+                    <td>
+                        <a href="{{ url_for('edit_entry', entry_id=entry.id) }}" class="btn btn-info btn-sm">Edit</a>
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="14" class="text-center">No census entries found.</td>
+                </tr>
+            {% endfor %}
             </tbody>
         </table>
     </div>
+</div>
 </body>
 </html>
