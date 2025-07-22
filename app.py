@@ -6,13 +6,14 @@ from forms import LoginForm, RegisterForm, CensusForm
 from models import db, User, CensusEntry
 import pandas as pd
 from datetime import datetime
+from flask_migrate import Migrate
 import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'replace_this_with_a_random_secret'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
-
 db.init_app(app)
+migrate = Migrate(app, db)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -56,7 +57,7 @@ def logout():
 @app.route('/dashboard', methods=['GET', 'POST'])
 @login_required
 def dashboard():
-    entries = CensusEntry.query.order_by(CensusEntry.entry_date).all()
+    entries = CensusEntry.query.filter_by(user_id=current_user.id).order_by(CensusEntry.entry_date).all()
     return render_template('dashboard.html', entries=entries)
 
 @app.route('/add', methods=['GET', 'POST'])
@@ -64,7 +65,8 @@ def dashboard():
 def add_entry():
     form = CensusForm()
     if form.validate_on_submit():
-        existing = CensusEntry.query.filter_by(entry_date=form.entry_date.data).first()
+        # Prevent duplicate entry for this user/date
+        existing = CensusEntry.query.filter_by(entry_date=form.entry_date.data, user_id=current_user.id).first()
         if existing:
             flash('An entry for this date already exists. You can edit it below.')
             return redirect(url_for('edit_entry', entry_id=existing.id))
@@ -82,15 +84,16 @@ def add_entry():
             e_new_male=form.e_new_male.data,
             e_new_female=form.e_new_female.data,
             e_new_child=form.e_new_child.data,
+            user_id=current_user.id
         )
         db.session.add(entry)
         db.session.commit()
         flash('Census data added!')
 
-        # User-specific Excel auto-save logic
+        # User-specific Excel auto-save
         user_dir = os.path.join('user_excels', current_user.username)
         os.makedirs(user_dir, exist_ok=True)
-        entries = CensusEntry.query.order_by(CensusEntry.entry_date).all()
+        entries = CensusEntry.query.filter_by(user_id=current_user.id).order_by(CensusEntry.entry_date).all()
         data = []
         for e in entries:
             morning_total = (
@@ -139,13 +142,14 @@ def add_entry():
 @app.route('/edit/<int:entry_id>', methods=['GET', 'POST'])
 @login_required
 def edit_entry(entry_id):
-    entry = CensusEntry.query.get_or_404(entry_id)
+    entry = CensusEntry.query.filter_by(id=entry_id, user_id=current_user.id).first_or_404()
     form = CensusForm(obj=entry)
     if form.validate_on_submit():
         # Prevent changing to a date that causes a duplicate
         existing = CensusEntry.query.filter(
             CensusEntry.entry_date == form.entry_date.data,
-            CensusEntry.id != entry.id
+            CensusEntry.id != entry.id,
+            CensusEntry.user_id == current_user.id
         ).first()
         if existing:
             flash('Another entry for this date already exists.')
@@ -176,26 +180,21 @@ def download():
     import re
 
     month = request.args.get('month')  # expects 'YYYY-MM'
-    # Validate that the parameter exists and is strictly in YYYY-MM format
     if not month or not re.match(r'^\d{4}-\d{2}$', month):
         flash("Please select a valid month to download, format: YYYY-MM")
         return redirect(url_for('dashboard'))
-
     year_val, month_val = map(int, month.split('-'))
     if not (1 <= month_val <= 12):
         flash("Invalid month selected.")
         return redirect(url_for('dashboard'))
-
-    # Filter entries by month and year
     entries = CensusEntry.query.filter(
+        CensusEntry.user_id == current_user.id,
         db.extract('year', CensusEntry.entry_date) == year_val,
         db.extract('month', CensusEntry.entry_date) == month_val
     ).order_by(CensusEntry.entry_date).all()
-
     if not entries:
         flash(f"No census data available for {month}.")
         return redirect(url_for('dashboard'))
-
     data = []
     for e in entries:
         morning_total = (
@@ -239,7 +238,7 @@ def download():
     output = io.BytesIO()
     df = pd.DataFrame(data)
     filename = f"census_data_{year_val:04d}_{month_val:02d}.xlsx"
-    df.to_excel(output, index=False, engine="openpyxl")
+    df.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
     return send_file(
         output,
@@ -248,21 +247,7 @@ def download():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-
-
-
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-        # --- Default admin user creation (optional, safe to keep for emergencies) ---
-        admin_user = User.query.filter_by(username='admin').first()
-        if not admin_user:
-            admin = User(
-                username='admin',
-                password=generate_password_hash('admin123'), # Default password
-                role='admin'
-            )
-            db.session.add(admin)
-            db.session.commit()
-        # --- End admin block ---
     app.run(debug=True)

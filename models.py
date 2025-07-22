@@ -7,11 +7,13 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # Still tracked for future use; always 'dataentry' if user registered
+    role = db.Column(db.String(20), nullable=False)
+    # The following is recommended for easy access:
+    census_entries = db.relationship('CensusEntry', backref='user', lazy=True)
 
 class CensusEntry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    entry_date = db.Column(db.Date, nullable=False, unique=True)
+    entry_date = db.Column(db.Date, nullable=False)  # unique=True removed here!
     # Morning Old/New Cases
     m_old_male = db.Column(db.Integer)
     m_old_female = db.Column(db.Integer)
@@ -26,3 +28,6 @@ class CensusEntry(db.Model):
     e_new_male = db.Column(db.Integer)
     e_new_female = db.Column(db.Integer)
     e_new_child = db.Column(db.Integer)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # <-- add this
+
+
